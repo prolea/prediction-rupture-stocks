@@ -94,8 +94,8 @@ final_df = sales_df.merge(products_df, on="product_id", how="left", suffixes=("_
 final_df["date"] = pd.to_datetime(final_df["date"]) 
 stock_levels_df["date"] = pd.to_datetime(stock_levels_df["date"])
 
-print(final_df.head())
-print(stock_levels_df.head())
+print(final_df.head(15))
+print(stock_levels_df.head(15))
 #final_df.to_csv("sales_data.csv", index=False) pour enregistrer le fichier
 
 #Histogramme du stock et courbes de tendances sur 7 jours puis 14 jours
