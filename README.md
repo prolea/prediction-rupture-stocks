@@ -1,7 +1,7 @@
 # Prédiction des produits en rupture de stock en e-commerce
 
 ## Description du projet
-Ce projet vise à analyser les données de vente et de stock afin de prédire quels produits risquent d'être en rupture de stock. L'objectif est d'optimiser la gestion des stocks et d'aider les commerçants à mieux anticiper leurs réapprovisionnements. Les données utilisées sont générées de manière fictive pour tester différentes approches d'analyse et de Machine Learning
+Ce projet vise à analyser les données de vente et de stock afin de prédire quels produits risquent d'être en rupture de stock. L'objectif est d'optimiser la gestion des stocks et d'aider les commerçants à mieux anticiper leurs réapprovisionnements. Les données utilisées sont générées de manière fictive pour tester différentes approches d'analyse et de Machine Learning.
 
 ## Technologies utilisées
 - **Python** : Langage principal du projet
