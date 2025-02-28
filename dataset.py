@@ -31,7 +31,7 @@ random.shuffle(product_types) # Mélange la distribution des types
 
 products_df["product_type"] = product_types[:len(products_df)]
 
-# Définition des niveaux de stock en fonction du type de produit
+# Attribution du stock initial en fonction du type de produit
 def assign_stock(product_type):
     if product_type == "bestseller":
         return random.randint(100,200)
@@ -43,99 +43,88 @@ def assign_stock(product_type):
 #application de la fonction à chaque ligne
 products_df["initial_stock"] = products_df["product_type"].apply(assign_stock)
 
-# Dictionnaire pour suivre les stocks journaliers
-stock_levels = {row["product_id"]: row["initial_stock"] for _, row in products_df.iterrows()}
-
 # Génération des ventes
 start_date = datetime.today() - timedelta(days=num_days)
 date_range = [start_date + timedelta(days=i) for i in range(num_days)]
 
 
 sales_data = []
-stock_history = []
-
 for day in date_range:
-    for product_id in stock_levels.keys():
-        remaining_stock = stock_levels[product_id]
-
-        units_sold = random.randint(0,10)
-        units_sold = min(units_sold, remaining_stock) # Empêche de vendre plus que le stock dispo
+    for _, product in products_df.iterrows():
+        # Attribution des ventes en fonction du type
+        if product["product_type"] == "bestseller":
+            units_sold = random.randint(5,15)
+        elif product["product_type"] == "niche":
+            units_sold = random.randint(0,5)
+        else : #normal
+            units_sold = random.randint(1,10)
 
         is_promo = random.choice([0,1]) if random.random() < 0.2 else 0
 
         # Enregistrement des ventes
         sales_data.append({
             "date": day.strftime("%Y-%m-%d"),
-            "product_id": product_id,
-            "stock_quantity": remaining_stock - units_sold,  # Stock après mise à jour
+            "product_id": product["product_id"],
             "units_sold": units_sold,
             "is_promotion": is_promo,
             "weekday": day.strftime("%A"),  
             "season": "Hiver" if day.month in [12, 1, 2] else "Printemps" if day.month in [3, 4, 5] else "Été" if day.month in [6, 7, 8] else "Automne"
         })
-        
-        # Mise à jour du stock
-        stock_levels[product_id] = max(0, remaining_stock - units_sold)
 
-        # Enregistrement du stock restant pour analyse
-        stock_history.append({
-            "date": day.strftime("%Y/%m-%d"),
-            "product_id": stock_levels[product_id]
-        })
-
-# Création des dataframes
 sales_df = pd.DataFrame(sales_data)
-stock_levels_df = pd.DataFrame(stock_history) # Dataframe de suivi des stocks
+sales_df["date"] = pd.to_datetime(sales_df["date"])
 
-# Fusion avec les produits avec gestion des noms de colonnes pour éviter les conflits
-final_df = sales_df.merge(products_df, on="product_id", how="left", suffixes=("_sales", "_product"))
+sales_df = sales_df.merge(products_df[["product_id", "initial_stock"]], on="product_id", how="left")
 
-# Conversion de la date en datetime
-final_df["date"] = pd.to_datetime(final_df["date"]) 
-stock_levels_df["date"] = pd.to_datetime(stock_levels_df["date"])
+sales_df["cumulative_sales"] = sales_df.groupby("product_id")["units_sold"].cumsum()
+sales_df["remaining_stock"] = sales_df["initial_stock"] - sales_df["cumulative_sales"]
+sales_df["remaining_stock"] = sales_df["remaining_stock"].clip(lower=0) # Évite les stocks négatifs
 
-print(final_df.head(15))
-print(stock_levels_df.head(15))
-#final_df.to_csv("sales_data.csv", index=False) pour enregistrer le fichier
+#Regroupement des ventes par type de produit
+sales_by_type = sales_df.merge(products_df[["product_id", "product_type"]], on="product_id", how="left")
+sales_by_type = sales_by_type.groupby("product_type")["units_sold"].sum().reset_index()
 
-#Histogramme du stock et courbes de tendances sur 7 jours puis 14 jours
+# Graphique comparaison des ventes par type de produit
 plt.figure(figsize=(8,5))
-sns.histplot(final_df["stock_quantity"], bins=20, kde=True, color="royalblue")
+sns.barplot(x="product_type", y="units_sold", data=sales_by_type, palette=["royalblue", "orange", "green"])
+
+plt.title("Comparaison des ventes par type de produit")
+plt.xlabel("Type de produit")
+plt.ylabel("Nombre total d'unités vendues")
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+
+# Histogramme du stock avec KDE (distribution estimée)
+plt.figure(figsize=(8,5))
+sns.histplot(sales_df["remaining_stock"], bins=20, kde=True, color="royalblue")
 plt.title("Répartition des stocks des produits")
 plt.xlabel("Quantité en stock")
 plt.ylabel("Nombre de produits")
 
-daily_sales = final_df.groupby("date")["units_sold"].sum().reset_index()
-daily_sales["moving_avg"] = daily_sales["units_sold"].rolling(window=7).mean()
+# Courbe de tendance des ventes (sur 14 jours)
+daily_sales = sales_df.groupby("date")["units_sold"].sum().reset_index()
+daily_sales["moving_avg_14"] = daily_sales["units_sold"].rolling(window=14, min_periods=1).mean()
+
+print(daily_sales.head())
 
 plt.figure(figsize=(12,6))
 sns.lineplot(x="date", y="units_sold", data=daily_sales, label="Ventes journalières", color="royalblue")
-sns.lineplot(x="date", y="moving_avg", data=daily_sales, label="Moyenne mobile (7 jours)", color="red")
+sns.lineplot(x="date", y="moving_avg_14", data=daily_sales, label="Moyenne mobile (14 jours)", color="green")
 
-plt.title("Évolution des ventes journalières")
+plt.title("Évolution des ventes journalières avec lissage sur 14 jours")
 plt.xlabel("Date")
 plt.ylabel("Nombre d'unités vendues")
 plt.legend()
 plt.xticks(rotation=45)
+plt.grid(True)
 
-daily_sales["moving_avg_14"] = daily_sales["units_sold"].rolling(window=14).mean()
+# relation entre le stock et les ventes
+plt.figure(figsize=(10,5))
+sns.scatterplot(x="date", y="remaining_stock", data=sales_df, alpha=0.5, color="royalblue")
 
-plt.figure(figsize=(12,6))
-sns.lineplot(x="date", y="units_sold", data=daily_sales, label="Ventes Journalières", color="royalblue")
-sns.lineplot(x="date", y="moving_avg_14", data=daily_sales, label="Moyenne mobile (14 jours)", color="red")
-
-plt.title("Évolution des ventes avec lissage sur 14 jours")
+plt.title("Évolution du stock restant")
 plt.xlabel("Date")
-plt.ylabel("Nombre d'unités vendues")
-plt.legend()
+plt.ylabel("Stock restant")
 plt.xticks(rotation=45)
-
-#Scatterplot relation entre le stock et les ventes
-plt.figure(figsize=(8,5))
-sns.scatterplot(x=final_df["stock_quantity"], y=final_df["units_sold"], alpha=0.5, color="royalblue")
-
-plt.title("Relation entre le stock et les ventes")
-plt.xlabel("Stock restant")
-plt.ylabel("Unités vendues")
-#plt.show()
+plt.grid(True)
+plt.show()
 
