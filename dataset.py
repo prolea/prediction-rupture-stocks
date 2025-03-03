@@ -6,10 +6,10 @@ from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-fake = Faker()
+fake = Faker() # Initialise Faker pour générer des noms de produits fictifs
 
-num_products = 50
-num_days = 30
+num_products = 50  # Nombre de produits différents
+num_days = 30 # Nombre de jours de vente simulés
 
 # Génération  des produits
 categories = ["Électronique", "Vêtements", "Alimentation", "Beauté", "Sport"]
@@ -23,7 +23,7 @@ products = [
     for i in range(1, num_products + 1)
 ]
 
-products_df = pd.DataFrame(products)
+products_df = pd.DataFrame(products) # Pour faciliter la manip des données
 
 # Ajout du type de produit
 product_types = ["normal"] * 25 + ["bestseller"] * 15 + ["niche"] * 10 #permet d'obtenir exactement 50% de produits normaux, 30% de bestseller et 20% de niche.
@@ -44,14 +44,14 @@ def assign_stock(product_type):
 products_df["initial_stock"] = products_df["product_type"].apply(assign_stock)
 
 # Génération des ventes
-start_date = datetime.today() - timedelta(days=num_days)
-date_range = [start_date + timedelta(days=i) for i in range(num_days)]
+start_date = datetime.today() - timedelta(days=num_days) # Date de début des ventes
+date_range = [start_date + timedelta(days=i) for i in range(num_days)] # Génère une liste de dates couvrant les 30 jours 
 
 
 sales_data = []
+# Attribution des ventes en fonction du type pour chaque jour
 for day in date_range:
     for _, product in products_df.iterrows():
-        # Attribution des ventes en fonction du type
         if product["product_type"] == "bestseller":
             units_sold = random.randint(5,15)
         elif product["product_type"] == "niche":
@@ -59,30 +59,33 @@ for day in date_range:
         else : #normal
             units_sold = random.randint(1,10)
 
-        is_promo = random.choice([0,1]) if random.random() < 0.2 else 0
-
+        is_promo = random.choice([0,1]) if random.random() < 0.2 else 0 # 20% de chance d'avoir une proom
+        
         # Enregistrement des ventes
         sales_data.append({
             "date": day.strftime("%Y-%m-%d"),
             "product_id": product["product_id"],
             "units_sold": units_sold,
             "is_promotion": is_promo,
-            "weekday": day.strftime("%A"),  
+            "weekday": day.strftime("%A"), # Nom du jour (ex: Lundi)
             "season": "Hiver" if day.month in [12, 1, 2] else "Printemps" if day.month in [3, 4, 5] else "Été" if day.month in [6, 7, 8] else "Automne"
         })
 
 sales_df = pd.DataFrame(sales_data)
-sales_df["date"] = pd.to_datetime(sales_df["date"])
+sales_df["date"] = pd.to_datetime(sales_df["date"]) # Convertit en format datetime
 
-sales_df = sales_df.merge(products_df[["product_id", "initial_stock"]], on="product_id", how="left")
+# Fusion de sales_df avec product_df pour récupérer le stock initial de chaque produit
+sales_df = sales_df.merge(products_df[["product_id", "initial_stock"]], on="product_id", how="left") 
 
-sales_df["cumulative_sales"] = sales_df.groupby("product_id")["units_sold"].cumsum()
+# Calcul du stock restant en soustrayant les ventes cumulées du stock initial
+sales_df["cumulative_sales"] = sales_df.groupby("product_id")["units_sold"].cumsum() # Permet de suivre la progression des ventes cumulées pour chaque product_id
 sales_df["remaining_stock"] = sales_df["initial_stock"] - sales_df["cumulative_sales"]
-sales_df["remaining_stock"] = sales_df["remaining_stock"].clip(lower=0) # Évite les stocks négatifs
+sales_df["remaining_stock"] = sales_df["remaining_stock"].clip(lower=0) # Évite les stocks négatifs en remplaçant les valeurs négatives pas 0
 
-#Regroupement des ventes par type de produit
+# Regroupement des ventes totales par type de produit pour réaliser les graphiques
 sales_by_type = sales_df.merge(products_df[["product_id", "product_type"]], on="product_id", how="left")
 sales_by_type = sales_by_type.groupby("product_type")["units_sold"].sum().reset_index()
+
 
 # Graphique comparaison des ventes par type de produit
 plt.figure(figsize=(8,5))
