@@ -280,10 +280,11 @@ sales_df = pd.DataFrame(sales_data)
 sales_df["date"] = pd.to_datetime(sales_df["date"]) # Convertit en format datetime
 
 #Choix des colonnes à fusionner
-columns_to_merge = ["product_id", "product_type", "category", "initial stock", "product_name", "price"]
+columns_to_merge = ["product_id", "product_type", "category", "initial_stock", "product_name", "price"]
 
 #Fusion des colonnes choisies
 sales_df = sales_df.merge(products_df[columns_to_merge], on="product_id", how="left")
+
 
 #Définition des modes de paiement et leurs probabilités
 payment_methods = [
@@ -299,9 +300,6 @@ sales_df["payment_method"] = np.random.choice(
     size=len(sales_df),
     p=[m[1] for m in payment_methods]
 )
-
-# Fusion de sales_df avec product_df pour récupérer le stock initial de chaque produit
-sales_df = sales_df.merge(products_df[["product_id", "initial_stock"]], on="product_id", how="left") 
 
 #Comptage du nombre de commandes par client
 order_counts = sales_df["customer_id"].value_counts()
@@ -323,8 +321,7 @@ sales_df["remaining_stock"] = sales_df["initial_stock"] - sales_df["cumulative_s
 sales_df["remaining_stock"] = sales_df["remaining_stock"].clip(lower=0) # Évite les stocks négatifs en remplaçant les valeurs négatives pas 0
 
 # Regroupement des ventes totales par type de produit pour réaliser les graphiques
-sales_by_type = sales_df.merge(products_df[["product_id", "product_type"]], on="product_id", how="left")
-sales_by_type = sales_by_type.groupby("product_type")["units_sold"].sum().reset_index()
+sales_df.groupby("category")["units_sold"].sum().reset_index()
 
 #Calcul du chiffre d'affaires par produit
 sales_df["revenue"] = sales_df["units_sold"] * sales_df["final_price"]
@@ -352,9 +349,6 @@ category_return_reasons = {
     "Sport" : [("taille", 0.5), ("défaut", 0.3), ("changement d'avis", 0.2)]
 }
 
-#fusion des catégories de produits pour appliquer les retours selon cat
-sales_df = sales_df.merge(products_df[["product_id", "category"]], on="product_id", how="left")
-
 #Fonction de génération du motif de retour
 def generate_reason(row):
     if row["is_returned"] == 1:
@@ -366,9 +360,6 @@ def generate_reason(row):
 
 #Application de la fonction
 sales_df["return_reason"] = sales_df.apply(generate_reason, axis=1)
-
-#Fusion pour ajouter le type de produit à chaque vente
-sales_df = sales_df.merge(products_df[["product_id", "product_type"]], on="product_id", how="left")
 
 #Fonction de génération de note
 def generate_rating(row):
@@ -399,6 +390,7 @@ sales_df["rating"] = sales_df.apply(generate_rating, axis=1)
 #palette dégradée sur N couleurs
 palette = sns.color_palette("viridis", n_colors=len(top_products))
 
+
 #Graphique des 10 top produits par chiffre d'affaires
 plt.figure(figsize=(10, 6))
 sns.barplot(x="revenue", y="product_name", data=top_products, hue="revenue", palette="viridis", legend=False, dodge=False)
@@ -411,8 +403,7 @@ plt.show()
 
 
 #Distribution des stocks par catégorie
-remaining_stock_by_category = sales_df.merge(products_df[["product_id", "category"]], on="product_id", how="left")
-remaining_stock_by_category = remaining_stock_by_category.groupby("category")["remaining_stock"].mean().reset_index()
+remaining_stock_by_category = sales_df.groupby("category")["remaining_stock"].mean().reset_index()
 
 palette = sns.color_palette("coolwarm", n_colors=len(remaining_stock_by_category))
 
@@ -459,43 +450,3 @@ plt.ylabel("Ville")
 plt.grid(axis="x", linestyle="--", alpha=0.7)
 plt.tight_layout()
 plt.show()
-
-print(products_df.head())
-"""
-# Graphique comparaison des ventes par type de produit
-plt.figure(figsize=(8,5))
-sns.barplot(x="product_type", y="units_sold", data=sales_by_type, palette=["royalblue", "orange", "green"])
-
-plt.title("Quels produits génèrent le plus de ventes ?")
-plt.xlabel("Type de produit")
-plt.ylabel("Nombre total d'unités vendues")
-plt.grid(axis="y", linestyle="--", alpha=0.7)
-
-# Histogramme du stock avec KDE (distribution estimée)
-plt.figure(figsize=(8,5))
-sns.histplot(sales_df["remaining_stock"], bins=20, kde=True, color="royalblue")
-plt.title("Distribution des stocks des produits")
-plt.xlabel("Quantité en stock")
-plt.ylabel("Nombre de produits")
-
-plt.title("Tendance des ventes journalières")
-plt.xlabel("Date")
-plt.ylabel("Nombre d'unités vendues")
-plt.legend()
-plt.xticks(rotation=45)
-plt.grid(True)
-
-# relation entre le stock et les ventes
-plt.figure(figsize=(10,5))
-sns.scatterplot(x="date", y="remaining_stock", data=sales_df, alpha=0.5, color="royalblue")
-
-plt.title("Évolution du stock disponible par produit")
-plt.xlabel("Date")
-plt.ylabel("Stock restant")
-plt.xticks(rotation=45)
-plt.grid(True)
-plt.show()
-
-print(customers_df.head(10))
-
-"""
