@@ -30,22 +30,18 @@ for i in range(1, 1001):
     })
 
 customers_df = pd.DataFrame(customers)
-
 customers_df.to_csv("customers.csv", index=False, encoding="utf-8")
 
 
-customer_ids = customers_df["customer_id"].tolist() #Création de la liste des IDs clients 
-
 # Génération  des produits
 categories = ["Électronique", "Vêtements", "Alimentation", "Beauté", "Sport"]
-num_products = 50  # Nombre de produits différents
 
+# Ajout du type de produit
+product_types = ["normal"] * 25 + ["bestseller"] * 15 + ["niche"] * 10 #permet d'obtenir exactement 50% de produits normaux, 30% de bestseller et 20% de niche (50 produits au total).
+random.shuffle(product_types) # Mélange la distribution des types
 products = [] #liste vide pour y ajouter les produits 
-for i in range(1, num_products + 1):
-    
-    category = random.choice(categories)
-
-    #Génération d'un prix réaliste en fonction de la catégorie
+for i in range(1, 51): #50 produits
+    category = random.choice(categories)#Génération d'un prix réaliste en fonction de la catégorie
     if category == "Alimentation":
         price = round(random.uniform(1, 20), 2)
     elif category == "Beauté":
@@ -67,11 +63,6 @@ for i in range(1, num_products + 1):
     })
 
 products_df = pd.DataFrame(products) #Création du df des produits
-
-
-# Ajout du type de produit
-product_types = ["normal"] * 25 + ["bestseller"] * 15 + ["niche"] * 10 #permet d'obtenir exactement 50% de produits normaux, 30% de bestseller et 20% de niche (50 produits au total).
-random.shuffle(product_types) # Mélange la distribution des types
 
 products_df["product_type"] = product_types[:len(products_df)] # Ajout de la colonne "product type" dans le df
 
@@ -121,6 +112,14 @@ category_base_multipliers = {
     "Alimentation": 1.3
 }
 
+discount_rates = {
+    "Vêtements": 0.1,
+    "Électronique": 0.05,
+    "Beauté": 0.15,
+    "Alimentation": 0.07,
+    "Sport": 0.12
+}
+
 #Définition de campagnes marketing fictives
 marketing_campaigns = [
     {"name": "Buzz Tiktok", "duration": 5},
@@ -130,10 +129,8 @@ marketing_campaigns = [
 
 #Sélection aléatoire de 5 produits concernés par chaque campagne
 for i, campaign in enumerate(marketing_campaigns):
-    campaign_start = start_date + timedelta(days=i * 7)
-    campaign_end = campaign_start + timedelta(days=campaign["duration"] - 1)
-    campaign["start"] = campaign_start
-    campaign["end"] = campaign_end
+    campaign["start"] = start_date + timedelta(days=i * 7)
+    campaign["end"] = campaign["start"] + timedelta(days=campaign["duration"] - 1)
     campaign["product_ids"] = random.sample(list(products_df["product_id"]), 5)
 
 #Ajout d'événements ponctuels avec variation des taux 
@@ -168,20 +165,13 @@ special_events = [
     }
 ]
 
-discount_rates = {
-    "Vêtements": 0.1,
-    "Électronique": 0.05,
-    "Beauté": 0.15,
-    "Alimentation": 0.07,
-    "Sport": 0.12
-}
-
 # Attribution des ventes pour chaque jour
 sales_data = []
+customer_ids = customers_df["customer_id"].tolist() #Création de la liste des IDs clients 
+
 
 for day in date_range:
     for _, product in products_df.iterrows(): # _, sert à ignorer l'index de la ligne; iterrows() permet d’accéder aux valeurs de chaque produit, afin de récupérer son product_id, product_type, etc.
-
         # Définition des ventes de base selon le type de produit
         if product["product_type"] == "bestseller":
             units_sold = random.randint(5,15)
