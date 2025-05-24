@@ -1,3 +1,6 @@
+#-----Génération des données de base-----
+
+# Imports et configuration
 import pandas as pd
 import numpy as np
 from faker import Faker
@@ -9,7 +12,8 @@ import seaborn as sns
 fake = Faker("fr_FR") # Initialise Faker pour générer des noms de produits fictifs
 random.seed(42) #fige l'aléatoire pour que les résultats soient fixes
 
-num_days = 30 # Nombre de jours de vente simulés
+# Dates
+num_days = 30 
 start_date = datetime.today() - timedelta(days=num_days) # Date de début des ventes
 date_range = [start_date + timedelta(days=i) for i in range(num_days)] # Génère une liste de dates couvrant les 30 jours 
 
@@ -35,7 +39,6 @@ customers_df.to_csv("customers.csv", index=False, encoding="utf-8")
 
 # Génération  des produits
 categories = ["Électronique", "Vêtements", "Alimentation", "Beauté", "Sport"]
-
 # Ajout du type de produit
 product_types = ["normal"] * 25 + ["bestseller"] * 15 + ["niche"] * 10 #permet d'obtenir exactement 50% de produits normaux, 30% de bestseller et 20% de niche (50 produits au total).
 random.shuffle(product_types) # Mélange la distribution des types
@@ -54,17 +57,16 @@ for i in range(1, 51): #50 produits
         price = round(random.uniform(10, 500),2)
     else:
         price = round(random.uniform(10, 200),2)
-
+    product_type = product_types[i - 1]
     products.append({
         "product_id": i,
         "product_name": fake.word().capitalize(),
         "category": category,
-        "price": price
+        "price": price,
+        "product_type": product_type
     })
 
 products_df = pd.DataFrame(products) #Création du df des produits
-
-products_df["product_type"] = product_types[:len(products_df)] # Ajout de la colonne "product type" dans le df
 
 # Attribution du stock initial en fonction du type de produit
 def assign_stock(product_type):
@@ -77,9 +79,10 @@ def assign_stock(product_type):
 
 # Création de la colonne "initial_stock" et application de la fonction à chaque ligne
 products_df["initial_stock"] = products_df["product_type"].apply(assign_stock)
-
 #Sauvegarde des produits dans un fichier csv
 products_df.to_csv("products.csv", index=False, encoding="utf-8-sig")
+
+#-----Définition des facteurs d'impact sur les ventes-----
 
 #Création d'un coeff saisonnier pour refléter l'impact des saisons sur les ventes
 seasonal_multipliers = {
@@ -165,57 +168,31 @@ special_events = [
     }
 ]
 
+#-----Génération des ventes-----
+
 # Attribution des ventes pour chaque jour
 sales_data = []
 customer_ids = customers_df["customer_id"].tolist() #Création de la liste des IDs clients 
 
-
 for day in date_range:
     for _, product in products_df.iterrows(): # _, sert à ignorer l'index de la ligne; iterrows() permet d’accéder aux valeurs de chaque produit, afin de récupérer son product_id, product_type, etc.
         # Définition des ventes de base selon le type de produit
-        if product["product_type"] == "bestseller":
-            units_sold = random.randint(5,15)
-        elif product["product_type"] == "niche":
-            units_sold = random.randint(0,5)
-        else : #normal
-            units_sold = random.randint(1,10)
-
+        units_sold = random.randint(5, 15) if product["product_type"] == "bestseller" else random.randint(0, 5) if product["product_type"] == "niche" else random.randint(1, 10)
         #Ajout d'un éventuel effet promotion
         is_promo = random.choice([0,1]) if random.random() < 0.2 else 0 # 20% de chance d'avoir une promo
-        if is_promo:
-            units_sold += random.randint(3,10)
+        if is_promo: units_sold += random.randint(3,10)
 
-        season = (
-            "Hiver" if day.month in [12, 1, 2]
-            else "Printemps" if day.month in [3, 4, 5]
-            else "Été" if day.month in [6, 7, 8]
-            else "Automne"
-        )
-
-        #Application du multiplicateur saisonnier en fonction de la catégorie
-        key = (product["category"], season)
-        multiplier = seasonal_multipliers.get(key, 1.0)
-        units_sold = int(units_sold * multiplier)
-
-        #Application du multiplicateur selon le jour de la semaine
+        season = "Hiver" if day.month in [12, 1, 2] else "Printemps" if day.month in [3, 4, 5] else "Été" if day.month in [6, 7, 8] else "Automne"
+        units_sold = int(units_sold * seasonal_multipliers.get((product["category"], season), 1.0))
         weekday = day.strftime("%A") # Nom du jour (ex: Lundi)
-        weekday_multiplier = weekday_multipliers.get(weekday, 1.0)
-        units_sold = int(units_sold * weekday_multiplier)
+        units_sold = int(units_sold * weekday_multipliers.get(weekday, 1.0))
+        units_sold = int(units_sold * category_base_multipliers.get(product["category"], 1.0))
+        if is_promo: units_sold = int(units_sold * promo_multipliers)
 
-        #Application d'un multiplicateur selon la nature du produit
-        category = product["category"]
-        category_multiplier = category_base_multipliers.get(category, 1.0)
-        units_sold = int(units_sold * category_multiplier)
-
-        #Application de l'effet promo
-        if is_promo == 1:
-            units_sold = int(units_sold * promo_multipliers)
-        
         #Calcul du prix final avec remise
         base_price = product["price"]
-        if is_promo == 1:
-            category = product["category"]
-            discount_rate = discount_rates.get(category, 0) #récupère la remise selon la catégorie
+        if is_promo:
+            discount_rate = discount_rates.get(product["category"], 0) #récupère la remise selon la catégorie
             final_price = round(base_price * (1 - discount_rate), 2)
             discount_applied = 1
         else:
@@ -223,12 +200,10 @@ for day in date_range:
             discount_applied = 0 
 
         #Ajout d'un bruit gaussien pour simuler des imprévus réels
-        bruit = np.random.normal(loc=0, scale=2) #moyenne 0, ecart-type 2
-        units_sold = max(0, int(units_sold + bruit)) #arrondi et minimum 0
+        units_sold = max(0, int(units_sold + np.random.normal(0, 2))) #arrondi et minimum 0
 
         #initialisation
         campaign_name = None
-
         #Application de l'effet de campagne marketing
         for campaign in marketing_campaigns:
             if campaign["start"] <= day <= campaign["end"] and product["product_id"] in campaign["product_ids"]:
@@ -238,7 +213,6 @@ for day in date_range:
         
         #Initialisation
         event_name = None
-
         #Application de l'effet événement spécial
         for event in special_events:
             if event["start_date"].date() <= day.date() <= event["end_date"].date():
@@ -249,7 +223,6 @@ for day in date_range:
 
         #Choix aléatoire d'un client existant 
         customer_id = random.choice(customer_ids)
-
         # Enregistrement des données de vente
         sales_data.append({
             "date": day.strftime("%Y-%m-%d"),
@@ -269,9 +242,10 @@ for day in date_range:
 sales_df = pd.DataFrame(sales_data)
 sales_df["date"] = pd.to_datetime(sales_df["date"]) # Convertit en format datetime
 
+#-----Partie Fusion et enrichissement-----
+
 #Choix des colonnes à fusionner
 columns_to_merge = ["product_id", "product_type", "category", "initial_stock", "product_name", "price"]
-
 #Fusion des colonnes choisies
 sales_df = sales_df.merge(products_df[columns_to_merge], on="product_id", how="left")
 
@@ -283,7 +257,6 @@ payment_methods = [
     ("Apple Pay", 0.15),
     ("Carte cadeau", 0.1)
 ]
-
 #Ajout de la colonne payment_method dans sales_df
 sales_df["payment_method"] = np.random.choice(
     [m[0] for m in payment_methods],
@@ -293,40 +266,32 @@ sales_df["payment_method"] = np.random.choice(
 
 #Comptage du nombre de commandes par client
 order_counts = sales_df["customer_id"].value_counts()
-
 #Reclassement de chaque client selon son nombre d'achats
-def get_customer_type(order_count):
-    if order_count >= 5:
-        return "VIP"
-    elif order_count >= 2:
-        return "returning"
-    else:
-        return "new"
-    
+def get_customer_type(order_count): return "VIP" if order_count >= 5 else "returning" if order_count >= 2 else "new" 
 customers_df["customer_type"] = customers_df["customer_id"].map(order_counts).fillna(0).astype(int).apply(get_customer_type)
 
 # Calcul du stock restant en soustrayant les ventes cumulées du stock initial
 sales_df["cumulative_sales"] = sales_df.groupby("product_id")["units_sold"].cumsum() # Permet de suivre la progression des ventes cumulées pour chaque product_id
 sales_df["remaining_stock"] = sales_df["initial_stock"] - sales_df["cumulative_sales"]
-sales_df["remaining_stock"] = sales_df["remaining_stock"].clip(lower=0) # Évite les stocks négatifs en remplaçant les valeurs négatives pas 0
 
-# Regroupement des ventes totales par type de produit pour réaliser les graphiques
-sales_df.groupby("category")["units_sold"].sum().reset_index()
 
 #Calcul du chiffre d'affaires par produit
 sales_df["revenue"] = sales_df["units_sold"] * sales_df["final_price"]
-revenue_per_product = sales_df.groupby("product_id")["revenue"].sum().reset_index()
-revenue_per_product = revenue_per_product.merge(products_df[["product_id", "product_name", "category"]], on="product_id", how="left")
+revenue_per_product = (
+    sales_df.groupby("product_id")["revenue"]
+    .sum()
+    .reset_index()
+    .merge(products_df[["product_id", "product_name", "category", "product_type"]], on="product_id", how="left")
+)
 
-# Ajout du monde de livraison aléatoire
+top_products = revenue_per_product.sort_values(by="revenue", ascending=False).head(10)
+
+# Ajout du mode de livraison aléatoire
 delivery_modes = ["standard", "express", "pickup"]
 sales_df["delivery_mode"] = np.random.choice(delivery_modes, size=len(sales_df))
  
-top_products = revenue_per_product.sort_values(by="revenue", ascending=False).head(10)
-
 #Probabilité de retour ou annulation (par défaut 5%)
 return_prob = 0.05
-
 #Création de la colonne is_returned
 sales_df["is_returned"] = np.random.choice([0, 1], size=len(sales_df), p=[1 - return_prob, return_prob])
 
@@ -341,19 +306,18 @@ category_return_reasons = {
 
 #Fonction de génération du motif de retour
 def generate_reason(row):
-    if row["is_returned"] == 1:
+    if row["is_returned"]:
         reasons = category_return_reasons.get(row["category"], [("changement d'avis", 1.0)])
         motifs, weights = zip(*reasons)
         return np.random.choice(motifs, p=weights)
-    else:
-        return None
+    return None
 
 #Application de la fonction
 sales_df["return_reason"] = sales_df.apply(generate_reason, axis=1)
 
 #Fonction de génération de note
 def generate_rating(row):
-    if row["is_returned"] == 1:
+    if row["is_returned"]:
         return None
 
     #Note de base selon le type de produit
@@ -370,18 +334,17 @@ def generate_rating(row):
     #Bruit aléatoire pour varier un peu les notes
     noise = np.random.normal(0, 0.5)
     rating = base_rating + noise
-
     #arrondi entre 1.0 et 5.0
     return round(min(max(rating, 1), 5), 1)
 
 #Application 
 sales_df["rating"] = sales_df.apply(generate_rating, axis=1)
 
-#palette dégradée sur N couleurs
-palette = sns.color_palette("viridis", n_colors=len(top_products))
+#-----Graphiques-----
 
+#-----Graphique top 10 produits par chiffre d'affaires-----
 
-#Graphique des 10 top produits par chiffre d'affaires
+palette = sns.color_palette("viridis", n_colors=len(top_products))#palette dégradée sur N couleurs
 plt.figure(figsize=(10, 6))
 sns.barplot(x="revenue", y="product_name", data=top_products, hue="revenue", palette="viridis", legend=False, dodge=False)
 plt.title("Top 10 des produits par chiffre d'affaires")
@@ -391,13 +354,14 @@ plt.grid(axis="x", linestyle="--", alpha=0.7)
 plt.tight_layout()
 plt.show()
 
+#-----Graphique stock moyen restant par catégorie-----
+sales_df["remaining_stock"] = sales_df["remaining_stock"].clip(lower=0) # Évite les stocks négatifs en remplaçant les valeurs négatives pas 0
 
 #Distribution des stocks par catégorie
-remaining_stock_by_category = sales_df.groupby("category")["remaining_stock"].mean().reset_index()
-
-palette = sns.color_palette("coolwarm", n_colors=len(remaining_stock_by_category))
+remaining_stock_by_category = (sales_df.groupby("category")["remaining_stock"].mean().reset_index())
 
 #Graphique distribution des stocks par catégorie
+palette = sns.color_palette("coolwarm", n_colors=len(remaining_stock_by_category))
 plt.figure(figsize=(8,5))
 sns.barplot(x="category", y="remaining_stock", data=remaining_stock_by_category,hue="remaining_stock", palette=palette)
 plt.title("Stock moyen restant par catégorie de produit")
@@ -408,30 +372,25 @@ plt.grid(axis="y", linestyle="--")
 plt.tight_layout()
 plt.show()
 
+#-----Graphique Nombre de commandes par ville-----
 
-#Nombre de commandes par ville
 sales_df["date"] = pd.to_datetime(sales_df["date"])
 sales_df["order_group"] = sales_df["customer_id"].astype(str) + "-" + sales_df["date"].dt.strftime("%Y-%m-%d")
 sales_df["order_id"] = sales_df["order_group"].astype("category").cat.codes + 1
 sales_df.drop("order_group", axis=1, inplace=True)
 
-orders_per_customer = sales_df.groupby("customer_id")["order_id"].nunique().reset_index()
-orders_per_customer.columns = ["customer_id", "num_orders"]
-
-#Fusion avec les infos clients pour avoir la localisation
-orders_by_city = sales_df[["customer_id", "order_id"]].drop_duplicates()
-orders_by_city = orders_by_city.merge(customers_df[["customer_id", "location"]], on="customer_id", how="left")
-
-#Nombre total de commande par ville
-orders_by_city = orders_by_city.groupby("location")["order_id"].nunique().reset_index()
-orders_by_city.columns = ["location", "num_orders"]
-
-#trier et garder les 10 premières
-orders_by_city = orders_by_city.sort_values(by="num_orders", ascending=False).head(10)
-
-palette = sns.color_palette("magma", n_colors=len(orders_by_city))
+orders_by_city = (
+    sales_df[["customer_id", "order_id"]].drop_duplicates()
+    .merge(customers_df[["customer_id", "location"]], on="customer_id", how="left")
+    .groupby("location")["order_id"].nunique()
+    .reset_index()
+    .sort_values(by="order_id", ascending=False)
+    .head(10)
+    .rename(columns={"order_id": "num_orders"})
+)
 
 #Graphique top 10 des villes par nombre de commandes
+palette = sns.color_palette("magma", n_colors=len(orders_by_city))
 plt.figure(figsize=(10,6))
 sns.barplot(x="num_orders", y="location", data=orders_by_city, hue="num_orders", palette=palette)
 plt.title("Top 10 des villes par nombre de commandes")
