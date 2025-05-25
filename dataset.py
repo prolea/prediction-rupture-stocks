@@ -399,3 +399,5 @@ plt.ylabel("Ville")
 plt.grid(axis="x", linestyle="--", alpha=0.7)
 plt.tight_layout()
 plt.show()
+
+sales_df.to_csv("sales_final.csv", index=False)
