@@ -249,6 +249,9 @@ columns_to_merge = ["product_id", "product_type", "category", "initial_stock", "
 #Fusion des colonnes choisies
 sales_df = sales_df.merge(products_df[columns_to_merge], on="product_id", how="left")
 
+#Renommer price_x en original_price, suppression de la colonne price en trop
+sales_df = sales_df.rename(columns={"price_x": "original_price"})
+sales_df.drop(columns=["price_y"], inplace=True)
 
 #Définition des modes de paiement et leurs probabilités
 payment_methods = [
@@ -400,4 +403,17 @@ plt.grid(axis="x", linestyle="--", alpha=0.7)
 plt.tight_layout()
 plt.show()
 
+# Réorganisation des colonnes
+ordered_columns = [
+    "date","order_id", "customer_id", "payment_method", 
+    "product_id", "product_name", "category", "product_type", 
+    "units_sold", "is_promotion", "original_price", "discount_applied", "final_price",
+    "initial_stock", "remaining_stock", "cumulative_sales", "revenue",
+    "delivery_mode", "is_returned", "return_reason",
+    "rating",
+    "weekday", "season", "campaign_name", "event" 
+]
+sales_df = sales_df[ordered_columns]
 sales_df.to_csv("sales_final.csv", index=False)
+
+print(sales_df.columns)
